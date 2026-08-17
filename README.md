@@ -107,15 +107,14 @@ kronosprior verify --stub --symbols AAAUSDT BBBUSDT --synthetic-bars 300
 and every experiment reads from disk. The cache path is a hash of the full `RunConfig`,
 so changing the horizon or the seed writes somewhere new rather than silently mixing with
 an old run. A `manifest.json` records library versions, device, and whether the stub was
-used — `cache.is_stub` guards results.
+used `cache.is_stub` guards results.
 
 **Seeds are derived per `(symbol, timestamp)`**, not drawn from one global stream, so
 interrupting a run and resuming it reproduces the same bytes as running it start to
 finish.
 
 **Determinism is per-device.** The same seed on the same device and torch build gives
-identical samples. It is not guaranteed across CPU/GPU or torch versions, which is why
-the manifest records both.
+identical samples. It is not guaranteed across CPU/GPU or torch versions.
 
 **The universe is frozen** in `config.py` and deliberately never revised. Re-picking
 today's top coins and running them backwards is survivorship bias.
