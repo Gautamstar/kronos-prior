@@ -4,6 +4,7 @@
     kronosprior build-panel      parse + validate + write the canonical panel
     kronosprior forecast         generate and cache sampled paths
     kronosprior verify           the Phase 0 gate: prove a run is reproducible
+    kronosprior calibrate        the Phase 1 study: calibration against baselines
 """
 
 from __future__ import annotations
@@ -107,7 +108,10 @@ def cmd_forecast(args: argparse.Namespace) -> int:
             )
             cache.put(symbol, asof, samples)
             done += 1
-        print(f"  {asof}  written={done} skipped={skipped}", end="\r", flush=True)
+        # Carriage return only on a terminal. Redirected to a file or a test capture it
+        # would emit one line per date.
+        if sys.stdout.isatty():
+            print(f"  {asof}  written={done} skipped={skipped}", end="\r", flush=True)
     print(f"\nwrote {done} shards, skipped {skipped} already present")
     if getattr(forecaster, "is_stub", False):
         print("NOTE: stub forecaster. This cache is for plumbing tests only.")
@@ -157,6 +161,39 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_calibrate(args: argparse.Namespace) -> int:
+    """Phase 1: is the cached predictive distribution calibrated, and does it beat the baselines?"""
+    from .study import gather_cached, per_symbol_table, run_study
+
+    cfg = _cfg(args)
+    panel = (
+        data_mod.synthetic_panel(list(cfg.symbols), n_bars=args.synthetic_bars)
+        if args.stub
+        else data_mod.load_panel(cfg.bars_path)
+    )
+    cache = ForecastCache.for_config(cfg)
+    reports, table = run_study(cache, panel, list(cfg.symbols), args.baselines)
+
+    print(f"cache   {cache.root}")
+    print(f"cases   {reports[0].n_cases}   samples {reports[0].n_samples}\n")
+    for report in reports:
+        print(report)
+        print()
+
+    print("ranked by CRPS (lower is better)")
+    print(table.to_string(index=False))
+
+    if args.per_symbol:
+        print("\nper symbol")
+        print(per_symbol_table(gather_cached(cache, panel, list(cfg.symbols))).to_string())
+
+    best = table.iloc[0]["label"]
+    print(f"\nbest: {best}")
+    if cache.is_stub:
+        print("NOTE: stub forecaster. These numbers are plumbing, not a result.")
+    return 0
+
+
 # --------------------------------------------------------------------------------------
 
 
@@ -198,6 +235,15 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("verify", help="Phase 0 gate: reproducibility and no lookahead")
     common(sp, model=True)
     sp.set_defaults(func=cmd_verify)
+
+    sp = sub.add_parser("calibrate", help="Phase 1: calibration against baselines")
+    common(sp, model=True)
+    sp.add_argument(
+        "--baselines", nargs="*", default=None,
+        help="baselines to compare against (default: all). Pass with no values for none.",
+    )
+    sp.add_argument("--per-symbol", dest="per_symbol", action="store_true")
+    sp.set_defaults(func=cmd_calibrate)
     return p
 
 
