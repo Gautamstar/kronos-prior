@@ -31,7 +31,7 @@ The paths are generated in parallel as a batch dimension and then averaged away,
 
 **2. Kronos has no cross-sectional channel.** Each asset is forecast independently, so
 sample *k* for BTC and sample *k* for ETH are not a joint draw. Stack them into a scenario
-matrix and you have asserted that crypto assets move independently — which is false, and
+matrix and you have asserted that crypto assets move independently which is false, and
 false in exactly the direction that makes a portfolio look safer than it is. Correlations
 converge in drawdowns; that is when portfolio tail risk actually bites.
 
@@ -40,10 +40,10 @@ defect as a test, on synthetic data whose true correlation is 0.75.
 
 ## The intended fix (Phase 2)
 
-Keep Kronos's marginals exactly — the shape, the tails, the vol clustering it learned
-from 45+ exchanges — and impose the dependence structure from realised returns using
+Keep Kronos's marginals exactly the shape, the tails, the vol clustering it learned
+from 45+ exchanges and impose the dependence structure from realised returns using
 **Iman–Conover rank recombination**: draw a reference multivariate normal with the target
-correlation, take its per-column ranks, reorder each asset's samples to match. Marginals
+correlation, take its percolumn ranks, reorder each asset's samples to match. Marginals
 are preserved exactly; Spearman correlation lands on target.
 
 The division of labour, which is the whole thesis:
@@ -87,7 +87,7 @@ kronosprior forecast                  # generate + cache sampled paths
 ```
 
 Every command takes `--stub` to run the whole pipeline on synthetic data with a
-torch-free forecaster — no weights, no network, no GPU:
+torch-free forecaster :
 
 ```bash
 kronosprior verify --stub --symbols AAAUSDT BBBUSDT --synthetic-bars 300
@@ -99,7 +99,7 @@ kronosprior verify --stub --symbols AAAUSDT BBBUSDT --synthetic-bars 300
 
 - the context window ends at `asof` and never overlaps the forecast window
 - the same seed produces byte-identical samples across two calls
-- the samples do not collapse — there is an actual distribution to carry
+- the samples do not collapse, there is an actual distribution to carry
 
 ## Design notes
 
@@ -131,7 +131,7 @@ a public model, so any edge it carries is already crowded, and retail systematic
 is negative expected value after costs for nearly everyone who attempts it.
 
 The deliverable is the prior and the evidence. The most likely honest outcome is that
-nothing here beats equal-weight after costs, and that estimation error in μ dominates —
+nothing here beats equal weight after costs, and that estimation error in μ dominates
 which is why HRP and risk budgeting, which ignore μ entirely, are in the comparison set.
 If they win, that is the finding.
 
