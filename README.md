@@ -1,139 +1,111 @@
 # kronos-prior
 
-A scikit-learn prior that carries a **Kronos** forecast distribution into **skfolio**
-portfolio optimization without destroying the cross-asset dependence structure.
+Carries an AI forecasting model's full predictive distribution into portfolio
+optimization, instead of collapsing it to a single number first.
 
-> **Status: Phase 0.** Data, sampling and cache are in place. The prior itself lands in
-> Phase 2. There are no performance claims here yet, and there may never be — see
+Built on [Kronos](https://github.com/shiyu-coder/Kronos), a foundation model for
+financial candlesticks, and [skfolio](https://skfolio.org), a portfolio optimizer with a
+scikit-learn API.
+
+> **Status: early.** The data and sampling layers are in place. The prior itself is next.
+> There are no performance claims here, and there may never be. See
 > [What this is not](#what-this-is-not).
 
-## The problem
+## The idea
 
-[Kronos](https://github.com/shiyu-coder/Kronos) is a foundation model for candlesticks.
-It produces a *distribution* over future price paths. [skfolio](https://skfolio.org) is a
-portfolio optimizer whose tail-risk objectives (CVaR, EVaR) consume a **scenario matrix**
-directly rather than reducing it to a mean and a covariance.
+A forecasting model like Kronos does not produce one guess about the future. It produces
+hundreds of possible futures: some flat, some a rally, some a crash. That spread is the
+most useful thing it knows.
 
-These two facts should fit together. Two things stop them.
+Most integrations throw it away. They average those futures into a single expected
+return, hand that to an optimizer, and discard everything about the range of outcomes.
+But the optimizers built to protect against bad outcomes, the ones targeting tail risk
+rather than average risk, can consume the full set of scenarios directly. Averaging first
+throws away the only thing that distinguishes a generative model from a linear
+regression.
 
-**1. Kronos throws the distribution away.** The last three lines of its
-`auto_regressive_inference` are:
+This project keeps the distribution intact all the way through.
 
-```python
-z = z.reshape(-1, sample_count, z.size(1), z.size(2))
-preds = z.cpu().numpy()
-preds = np.mean(preds, axis=1)      # <- the predictive distribution dies here
-```
+## The problem it solves
 
-The paths are generated in parallel as a batch dimension and then averaged away, so
-`KronosPredictor.predict()` returns one path no matter what `sample_count` you pass.
-`kronosprior/_sampling.py` reimplements that tail without the mean.
+Connecting these two tools the obvious way introduces a subtle error that is easy to miss
+and expensive to get wrong.
 
-**2. Kronos has no cross-sectional channel.** Each asset is forecast independently, so
-sample *k* for BTC and sample *k* for ETH are not a joint draw. Stack them into a scenario
-matrix and you have asserted that crypto assets move independently which is false, and
-false in exactly the direction that makes a portfolio look safer than it is. Correlations
-converge in drawdowns; that is when portfolio tail risk actually bites.
+The forecasting model looks at **one asset at a time**. It never sees two assets side by
+side, so the futures it imagines for one are unrelated to the futures it imagines for
+another. Line them up and feed them to an optimizer and you have quietly told it that
+these assets move independently.
 
-`tests/test_cache.py::test_independent_sampling_leaves_scenarios_uncorrelated` pins this
-defect as a test, on synthetic data whose true correlation is 0.75.
+They do not. They fall together. An optimizer that believes otherwise concludes a
+portfolio is far safer than it really is, and it is wrong in exactly the moment that
+matters most, which is the crash. Nothing errors, nothing looks unusual, and the backtest
+comes out looking good.
 
-## The intended fix (Phase 2)
+## The approach
 
-Keep Kronos's marginals exactly the shape, the tails, the vol clustering it learned
-from 45+ exchanges and impose the dependence structure from realised returns using
-**Iman–Conover rank recombination**: draw a reference multivariate normal with the target
-correlation, take its percolumn ranks, reorder each asset's samples to match. Marginals
-are preserved exactly; Spearman correlation lands on target.
+Keep the model's per-asset forecasts exactly as they are, then reorder which forecasts
+get paired together so the pairings reflect how the assets have historically moved.
+Nothing about any individual forecast changes, only which ones line up.
 
-The division of labour, which is the whole thesis:
+The division of labour is the whole point:
 
-> **Kronos knows what one asset's future looks like. History knows how assets move
-> together. Take the shape from Kronos, take the relationships from history.**
+> **The model knows what one asset's future looks like, including the rare disasters.
+> History knows how assets move together. Take the shape from the model, take the
+> relationships from history.**
 
-Three prior variants ship, and the third exists to fail:
+Each source does only what it is good at. The model has seen millions of charts but was
+never shown assets side by side. History has the relationships but contains only the
+handful of crashes that actually happened.
 
-| Variant | μ | Σ | `returns` |
-| :-- | :-- | :-- | :-- |
-| Conservative | Kronos | Ledoit–Wolf on history | historical |
-| **Coupled** | Kronos | of coupled scenarios | coupled scenarios |
-| Uncoupled *(ablation)* | Kronos | of raw scenarios | raw scenarios |
+Three variants ship, and the third exists in order to fail:
 
-The uncoupled run is built deliberately so the ablation has something to measure.
-Demonstrating that the naive integration underestimates tail risk is the deliverable.
+| Variant | What it does |
+| :-- | :-- |
+| Conservative | Model's expected returns, risk estimated from history |
+| **Coupled** | Full scenario set, dependence restored from history |
+| Uncoupled *(ablation)* | Full scenario set, dependence left broken |
+
+The uncoupled version is built deliberately so the comparison has something to measure.
+Demonstrating that the naive integration underestimates risk is the deliverable.
 
 ## Install
 
 ```bash
-uv venv && uv pip install -e ".[dev]"          # core: numpy, pandas, pyarrow
-uv pip install -e ".[kronos]"                   # + torch and the model deps
-uv pip install -e ".[research]"                 # + skfolio, scipy, matplotlib
-```
-
-Kronos ships as a repository, not a wheel:
-
-```bash
-git clone https://github.com/shiyu-coder/Kronos ~/src/Kronos
-export KRONOS_REPO=~/src/Kronos
+uv venv && uv pip install -e ".[dev]"      # core
+uv pip install -e ".[kronos]"               # + the model
+uv pip install -e ".[research]"             # + the optimizer and plotting
 ```
 
 ## Use
 
 ```bash
-kronosprior fetch                     # Binance monthly dumps -> data/raw
-kronosprior build-panel               # parse, validate, write data/bars/*.parquet
-kronosprior verify                    # the Phase 0 gate
-kronosprior forecast                  # generate + cache sampled paths
+kronosprior fetch          # download market data
+kronosprior build-panel    # parse and validate it
+kronosprior verify         # check reproducibility and that no future data leaks in
+kronosprior forecast       # generate and cache the forecast distributions
 ```
 
-Every command takes `--stub` to run the whole pipeline on synthetic data with a
-torch-free forecaster :
+Every command takes `--stub`, which runs the whole pipeline on synthetic data with a
+lightweight stand-in forecaster: no model weights, no network, no GPU.
 
 ```bash
 kronosprior verify --stub --symbols AAAUSDT BBBUSDT --synthetic-bars 300
 ```
 
-### The Phase 0 gate
-
-`kronosprior verify` passes only if all three hold:
-
-- the context window ends at `asof` and never overlaps the forecast window
-- the same seed produces byte-identical samples across two calls
-- the samples do not collapse, there is an actual distribution to carry
-
-## Design notes
-
-**The cache is the artifact.** Generation is the only expensive step, so it happens once
-and every experiment reads from disk. The cache path is a hash of the full `RunConfig`,
-so changing the horizon or the seed writes somewhere new rather than silently mixing with
-an old run. A `manifest.json` records library versions, device, and whether the stub was
-used `cache.is_stub` guards results.
-
-**Seeds are derived per `(symbol, timestamp)`**, not drawn from one global stream, so
-interrupting a run and resuming it reproduces the same bytes as running it start to
-finish.
-
-**Determinism is per-device.** The same seed on the same device and torch build gives
-identical samples. It is not guaranteed across CPU/GPU or torch versions.
-
-**The universe is frozen** in `config.py` and deliberately never revised. Re-picking
-today's top coins and running them backwards is survivorship bias.
-
-**Time convention.** Timestamps are tz-aware UTC and label the bar's *open*. A forecast
-made at the close of bar *t* may use no data after *t* and may not be acted on before
-*t*+1. `tests/test_windows.py` is the enforcement.
+Run `kronosprior <command> --help` for the options.
 
 ## What this is not
 
-This is not a trading strategy and there is no expectation that it makes money. Kronos is
-a public model, so any edge it carries is already crowded, and retail systematic trading
-is negative expected value after costs for nearly everyone who attempts it.
+This is not a trading strategy, and there is no expectation that it makes money. The
+underlying model is public, so any edge it carries is already crowded, and retail
+systematic trading is negative expected value after costs for nearly everyone who
+attempts it.
 
-The deliverable is the prior and the evidence. The most likely honest outcome is that
-nothing here beats equal weight after costs, and that estimation error in μ dominates
-which is why HRP and risk budgeting, which ignore μ entirely, are in the comparison set.
-If they win, that is the finding.
+The deliverable is the tooling and the evidence. The most likely honest outcome is that
+none of this beats a naive equal-weight portfolio once trading costs are counted, which
+is why methods that ignore expected returns entirely are in the comparison set. If they
+win, that is the finding, and it gets reported.
 
 ## Licence
 
-MIT. `_sampling.py` adapts Kronos's inference loop (MIT). skfolio is BSD-3-Clause.
+MIT. The sampling module adapts Kronos's inference code (MIT). skfolio is BSD-3-Clause.
