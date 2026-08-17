@@ -15,9 +15,8 @@ is to carry the distribution into portfolio construction, we reimplement the inf
 tail without the mean.
 
 The generation loop below is a direct adaptation of Kronos's own
-`auto_regressive_inference` (MIT, github.com/shiyu-coder/Kronos). Keeping it here rather
-than monkey-patching means upstream changes surface as a failing parity test rather than
-as silently different numbers.
+`auto_regressive_inference` (MIT, github.com/shiyu-coder/Kronos). Keeping a copy here
+means upstream changes surface as a failing parity test.
 
 `test_parity_with_upstream` asserts that averaging our samples reproduces Kronos's
 `predict()` output. That is the check that keeps this file honest.
@@ -39,8 +38,8 @@ class KronosNotAvailable(RuntimeError):
 def load_kronos(repo_path: str | Path | None = None):
     """Import Kronos's model package.
 
-    Kronos ships as a repository, not a wheel, so it has to be put on the path. Pass
-    `repo_path`, or set KRONOS_REPO, or have it importable already.
+    Kronos is not on PyPI, so its source has to be on the path. Pass `repo_path`, set
+    KRONOS_REPO, or have it importable already.
     """
     try:
         from model import Kronos, KronosPredictor, KronosTokenizer  # type: ignore

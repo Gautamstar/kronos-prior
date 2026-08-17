@@ -243,7 +243,7 @@ def symbol_frame(panel: pd.DataFrame, symbol: str) -> pd.DataFrame:
 
 
 # --------------------------------------------------------------------------------------
-# Synthetic data — used by the test suite so nothing in CI touches the network
+# Synthetic data. Used by the test suite so nothing in CI touches the network.
 # --------------------------------------------------------------------------------------
 
 

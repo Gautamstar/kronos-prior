@@ -38,7 +38,7 @@ def _time_features(index: pd.DatetimeIndex) -> np.ndarray:
 
 @runtime_checkable
 class SampleForecaster(Protocol):
-    """Produces a predictive distribution, not a point forecast."""
+    """Produces a predictive distribution."""
 
     def sample(
         self,
@@ -52,11 +52,11 @@ class SampleForecaster(Protocol):
 
 
 class KronosForecaster:
-    """Wraps Kronos, returning every sampled path rather than their mean.
+    """Wraps Kronos, returning every sampled path.
 
-    Mirrors `KronosPredictor.predict`'s normalization exactly — per-window mean and
-    std computed on the context only, then clipped — so our samples live in the same
-    space as upstream's output and the parity test is meaningful.
+    Normalization mirrors `KronosPredictor.predict`: per-window mean and std computed
+    on the context only, then clipped. Our samples land in the same space as upstream's
+    output, which is what makes the parity test meaningful.
     """
 
     def __init__(
@@ -118,8 +118,8 @@ class StubForecaster:
     """A seeded, torch-free stand-in with the right shape and rough dynamics.
 
     Exists so the cache, CLI, panel logic and (later) the prior are all testable in CI
-    with no weights and no network. It is not a baseline and must never appear in a
-    results table — `is_stub` marks it, and the cache manifest records it.
+    with no weights and no network. Never put it in a results table. `is_stub` marks it
+    and the cache manifest records it.
     """
 
     is_stub = True
@@ -160,7 +160,7 @@ class StubForecaster:
 
 
 # --------------------------------------------------------------------------------------
-# Windowing — the one place lookahead could enter
+# Windowing. The one place lookahead could enter.
 # --------------------------------------------------------------------------------------
 
 

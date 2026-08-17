@@ -3,13 +3,11 @@
 Generation is the only expensive step in the project, so it happens once and every
 experiment afterwards reads from disk. Three properties make that safe:
 
-* **Addressed by fingerprint.** The cache path is a hash of the full RunConfig, so a
-  changed horizon or seed writes somewhere new instead of silently mixing with old runs.
-* **Append-only per (symbol, date).** Interrupting a run and resuming it produces the
-  same bytes as running it start to finish, because seeds are derived per key rather
-  than drawn from one global stream.
+* **Addressed by fingerprint.** The cache path is a hash of the full RunConfig. A
+  changed horizon or seed writes to a new directory.
+* **Append-only per (symbol, date).** Seeds are derived per key, so interrupting a run
+  and resuming it produces the same bytes as running it start to finish.
 * **Manifested.** Library versions, device and stub-ness are recorded next to the data.
-  A result you cannot attribute to a configuration is not a result.
 """
 
 from __future__ import annotations
@@ -123,17 +121,13 @@ class ForecastCache:
         `anchor` maps symbol -> the realised close at `asof`, taken from the panel.
         The return is measured from that known price to the terminal sampled close, so
         the jump from the last observed bar into the first predicted bar is included.
-        Basing it on the first predicted bar instead would silently drop one bar of
-        move — the largest single component of a 24-bar return.
 
         This is the (n_samples, n_assets) matrix the Phase 2 prior consumes. Columns are
         ordered exactly as `symbols`.
 
-        NOTE: row k for BTC and row k for ETH are NOT a joint draw — Kronos samples each
-        asset independently. Treating this matrix as a scenario set without first
-        coupling the rows asserts zero cross-asset correlation. Coupling is Phase 2's
-        job; this method deliberately does not do it, so the uncoupled ablation has
-        something honest to measure.
+        NOTE: row k for BTC and row k for ETH are NOT a joint draw. Kronos samples each
+        asset independently, so this matrix has zero cross-asset correlation. Coupling
+        it is Phase 2's job.
         """
         symbols = list(symbols or self.cfg.symbols)
         missing = [s for s in symbols if s not in anchor.index]

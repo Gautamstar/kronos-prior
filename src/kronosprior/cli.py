@@ -110,7 +110,7 @@ def cmd_forecast(args: argparse.Namespace) -> int:
         print(f"  {asof}  written={done} skipped={skipped}", end="\r", flush=True)
     print(f"\nwrote {done} shards, skipped {skipped} already present")
     if getattr(forecaster, "is_stub", False):
-        print("NOTE: stub forecaster — this cache is for plumbing tests only.")
+        print("NOTE: stub forecaster. This cache is for plumbing tests only.")
     return 0
 
 
@@ -151,9 +151,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
         return 1
 
     if np.allclose(a.std(axis=0), 0):
-        print("collapsed: FAIL — every path identical, no distribution to carry")
+        print("collapsed: FAIL. Every path identical.")
         return 1
-    print("distribution: PASS — paths differ across samples")
+    print("distribution: PASS. Paths differ across samples.")
     return 0
 
 

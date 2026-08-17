@@ -6,14 +6,11 @@ These tests need real weights and torch, so they are skipped unless you opt in:
 
 The check that matters: if we average our samples, we must recover Kronos's own
 output. `_sampling.generate_samples` is a copy of upstream's inference loop with the
-final `np.mean` removed, so any divergence means the copy has drifted — either we
-introduced a bug, or upstream changed and we need to re-sync.
+final `np.mean` removed. Any divergence means the copy has drifted.
 
-Exact equality is not expected. Sampling is stochastic, and averaging N draws is a
-Monte Carlo estimate of the same quantity upstream computes from its own N draws, so
-the two agree in distribution rather than bitwise. The assertions below are therefore
-on the mean path within a tolerance that scales with the sampled spread. Run with a
-large `sample_count` — a tight tolerance on 8 samples will fail for honest reasons.
+Sampling is stochastic, so the two agree in distribution. The assertions below are on
+the mean path within a tolerance that scales with the sampled spread. Run with a large
+`sample_count`. A tight tolerance on 8 samples will fail for honest reasons.
 """
 
 from __future__ import annotations
@@ -104,7 +101,7 @@ def test_upstream_predict_collapses_the_distribution(kronos, window):
         verbose=False,
     )
     assert out.shape == (len(future), len(BAR_COLUMNS)), (
-        "predict() returned more than one path — upstream may now expose samples"
+        "predict() returned more than one path; upstream may now expose samples"
     )
 
 
@@ -141,7 +138,7 @@ def test_samples_are_a_real_distribution_not_a_repeated_path(kronos, window):
     ours = _our_samples(kronos, history, future, seed=0)
     assert ours.shape == (SAMPLE_COUNT, len(future), len(BAR_COLUMNS))
     spread = ours[:, -1, CLOSE].std()
-    assert spread > 0, "all sampled paths identical — nothing to carry into the prior"
+    assert spread > 0, "all sampled paths identical"
     # Uncertainty must grow with horizon, or the model is not forecasting.
     per_step = ours[:, :, CLOSE].std(axis=0)
     assert per_step[-1] > per_step[0]

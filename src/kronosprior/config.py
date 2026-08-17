@@ -130,9 +130,8 @@ class RunConfig:
     def seed_for(self, symbol: str, timestamp) -> int:
         """A per-(symbol, date) seed derived from the run seed.
 
-        Derived rather than global so that forecasting one asset, or resuming a
-        half-finished run, reproduces byte-identical output regardless of the order
-        work was done in. A single global torch seed would not survive a resume.
+        Each key gets its own seed, so forecasting one asset or resuming a
+        half-finished run reproduces byte-identical output.
         """
         key = f"{self.seed}|{symbol}|{int(getattr(timestamp, 'value', timestamp))}"
         return int(hashlib.sha256(key.encode()).hexdigest()[:8], 16)
