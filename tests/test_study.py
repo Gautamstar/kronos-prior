@@ -185,3 +185,21 @@ class TestCli:
         assert "ewma-gaussian" in out
         assert "per symbol" in out
         assert "plumbing, not a result" in out
+
+
+class TestBenchmark:
+    def test_reports_a_sizing_estimate(self, tmp_path, capsys):
+        code = main(
+            [
+                "--root", str(tmp_path), "benchmark",
+                "--symbols", "AAAUSDT", "BBBUSDT",
+                "--lookback", "128", "--horizon", "12", "--n-samples", "32",
+                "--synthetic-bars", "900", "--stub", "--repeats", "2",
+            ]
+        )
+        out = capsys.readouterr().out
+        assert code == 0
+        assert "per pass" in out
+        assert "full run" in out
+        assert "2 symbols x" in out
+        assert "estimate" in out

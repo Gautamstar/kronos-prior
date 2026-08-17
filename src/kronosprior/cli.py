@@ -4,6 +4,7 @@
     kronosprior build-panel      parse + validate + write the canonical panel
     kronosprior forecast         generate and cache sampled paths
     kronosprior verify           the Phase 0 gate: prove a run is reproducible
+    kronosprior benchmark        time one generation pass and size the full run
     kronosprior calibrate        the Phase 1 study: calibration against baselines
 """
 
@@ -161,6 +162,58 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_benchmark(args: argparse.Namespace) -> int:
+    """Time one generation pass and extrapolate the full run before committing to it.
+
+    Generation is the only expensive step in the project and it scales with
+    symbols x dates x samples x horizon. Measuring one pass first is the difference
+    between an overnight job and one that never finishes.
+    """
+    import time
+
+    cfg = _cfg(args)
+    panel = (
+        data_mod.synthetic_panel(list(cfg.symbols), n_bars=args.synthetic_bars)
+        if args.stub
+        else data_mod.load_panel(cfg.bars_path)
+    )
+    forecaster, device = _make_forecaster(args, cfg)
+
+    dates = rebalance_dates(panel.index, cfg)
+    asof = dates[0]
+    ctx, future = window_for(panel.index, asof, cfg)
+    history = data_mod.symbol_frame(panel, cfg.symbols[0]).iloc[ctx]
+
+    print(f"device    {device}")
+    print(f"model     {cfg.model_id if not args.stub else 'StubForecaster'}")
+    print(f"shape     {cfg.n_samples} samples x {cfg.horizon} steps, {cfg.lookback} context")
+
+    # One untimed pass first, so weight loading and any lazy allocation land outside
+    # the measurement.
+    forecaster.sample(history, future, cfg.n_samples, 0)
+
+    times = []
+    for i in range(args.repeats):
+        start = time.perf_counter()
+        forecaster.sample(history, future, cfg.n_samples, i + 1)
+        times.append(time.perf_counter() - start)
+
+    per_pass = float(np.median(times))
+    print(f"per pass  {per_pass:.2f}s  (median of {args.repeats})")
+
+    total_passes = len(cfg.symbols) * len(dates)
+    seconds = per_pass * total_passes
+    print(f"\nfull run  {len(cfg.symbols)} symbols x {len(dates)} dates = {total_passes} passes")
+    print(f"estimate  {seconds / 3600:.1f} hours ({seconds / 86400:.1f} days)")
+
+    if seconds > 12 * 3600:
+        print(
+            "\nThat does not fit in one sitting. Reduce symbols, shorten the date range, "
+            "cut n_samples, or move to a GPU."
+        )
+    return 0
+
+
 def cmd_calibrate(args: argparse.Namespace) -> int:
     """Phase 1: is the cached predictive distribution calibrated, and does it beat the baselines?"""
     from .study import gather_cached, per_symbol_table, run_study
@@ -235,6 +288,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp = sub.add_parser("verify", help="Phase 0 gate: reproducibility and no lookahead")
     common(sp, model=True)
     sp.set_defaults(func=cmd_verify)
+
+    sp = sub.add_parser("benchmark", help="time one generation pass and size the full run")
+    common(sp, model=True)
+    sp.add_argument("--repeats", type=int, default=3)
+    sp.set_defaults(func=cmd_benchmark)
 
     sp = sub.add_parser("calibrate", help="Phase 1: calibration against baselines")
     common(sp, model=True)
