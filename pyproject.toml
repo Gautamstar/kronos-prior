@@ -1,0 +1,63 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kronos-prior"
+version = "0.0.1"
+description = "A scikit-learn prior carrying Kronos forecast distributions into skfolio portfolio optimization, with cross-asset dependence restored."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Gautam Singh" }]
+keywords = ["portfolio-optimization", "skfolio", "kronos", "forecasting", "copula"]
+
+# Core stays light on purpose: the data and cache layers must be testable
+# without torch, and CI should not pull a 2 GB wheel to check a parquet round-trip.
+dependencies = [
+    "numpy>=1.26,<3",
+    "pandas>=2.2,<3",
+    "pyarrow>=15",
+]
+
+[project.optional-dependencies]
+# The model itself. Pinned to Kronos's own requirements.txt where it pins.
+kronos = [
+    "torch>=2.0.0",
+    "einops==0.8.1",
+    "huggingface_hub==0.33.1",
+    "safetensors==0.6.2",
+    "tqdm==4.67.1",
+]
+# Phase 2+ : the prior and the evaluation harness.
+research = [
+    "skfolio==0.20.2",
+    "scikit-learn>=1.5",
+    "scipy>=1.11",
+    "matplotlib>=3.9",
+]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+]
+
+[project.scripts]
+kronosprior = "kronosprior.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/kronosprior"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "needs_weights: requires downloaded Kronos weights; skipped by default",
+    "needs_network: reaches an external host; skipped by default",
+]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,24 @@
+# Data and forecast caches are large, regenerable, and must never be committed.
+data/
+*.parquet
+*.npy
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Notebook outputs get committed by accident and bloat diffs
+*-checkpoint.ipynb
+
+# Local model weights
+weights/
+*.safetensors
